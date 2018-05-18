@@ -23,11 +23,14 @@ func main() {
 	kvc := clientv3.NewKV(cli)
 
 	// tidy up keys once we are finished
+	clean_prefx := func(prefix string) {
+		fmt.Println(kvc.Get(context.Background(), prefix, clientv3.WithPrefix()))
+		fmt.Println(kvc.Delete(context.Background(), prefix, clientv3.WithPrefix()))
+	}
 	var tidyup = func() {
-		fmt.Println(kvc.Get(context.Background(), "/buffer", clientv3.WithPrefix()))
-		fmt.Println(kvc.Delete(context.Background(), "/buffer", clientv3.WithPrefix()))
-		fmt.Println(kvc.Get(context.Background(), "/slice", clientv3.WithPrefix()))
-		fmt.Println(kvc.Delete(context.Background(), "/slice", clientv3.WithPrefix()))
+		clean_prefx("/buffer")
+		clean_prefx("/slice")
+		clean_prefx("/ready")
 	}
 	tidyup()
 	defer tidyup()
@@ -64,8 +67,9 @@ func main() {
 			for _, ev := range wresp.Events {
 				if ev.Type.String() == "PUT" {
 					onPut(ev)
+				} else {
+					fmt.Printf("%s %q : %q\n", ev.Type, ev.Kv.Key, ev.Kv.Value)
 				}
-				fmt.Printf("%s %q : %q\n", ev.Type, ev.Kv.Key, ev.Kv.Value)
 			}
 		}
 	}
@@ -76,6 +80,19 @@ func main() {
 		slice_list_next = slice_list_next.Next()
 	}
 	go watch_prefix("/buffer", make_slice)
+
+	// watch for slice updates
+	print_event := func(event *clientv3.Event) {
+		buffer_key := event.Kv.Value
+		atomic_add(fmt.Sprintf("/ready%s", buffer_key), "fake_mountpoint")
+	}
+	go watch_prefix("/slice", print_event)
+
+	// watch for buffer setup complete
+	print_buffer_ready := func(event *clientv3.Event) {
+		fmt.Printf("Buffer ready %s with mountpoint %s\n", event.Kv.Key, event.Kv.Value)
+	}
+	go watch_prefix("/ready", print_buffer_ready)
 
 	// add some fake buffers to test the watch
 	ids := []int{1, 2, 3, 4, 5}
