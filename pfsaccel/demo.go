@@ -16,24 +16,48 @@ func main() {
 	})
 	if err != nil {
 		log.Fatal(err)
+		fmt.Println("hello")
 	}
 	defer cli.Close()
 	kvc := clientv3.NewKV(cli)
 
-	// perform a put only if key is missing
-	// It is useful to do the check atomically to avoid overwriting
-	// the existing key which would generate potentially unwanted events,
-	// unless of course you wanted to do an overwrite no matter what.
-	response, err := kvc.Txn(context.Background()).
-		If(clientv3util.KeyMissing("purpleidea1")).
-		Then(clientv3.OpPut("purpleidea1", "hello world33")).
-		Commit()
-	if err != nil {
-		log.Fatal(err)
+	// tidy up keys once we are finished
+	var tidyup = func() {
+		fmt.Println(kvc.Delete(context.Background(), "/buffer", clientv3.WithPrefix()))
 	}
-	if !response.Succeeded {
-		panic("oh dear")
+	tidyup()
+	defer tidyup()
+
+	// watch for updates
+	rch := cli.Watch(context.Background(), "/buffer", clientv3.WithPrefix())
+	var watch_buffer = func() {
+		for wresp := range rch {
+			for _, ev := range wresp.Events {
+				fmt.Printf("%s %q : %q\n", ev.Type, ev.Kv.Key, ev.Kv.Value)
+			}
+		}
+	}
+	go watch_buffer()
+
+	// atomic add new key
+	var atomic_add = func(id int) {
+		var  key = fmt.Sprintf("/buffer/%s", id)
+		response, err := kvc.Txn(context.Background()).
+			If(clientv3util.KeyMissing(key)).
+			Then(clientv3.OpPut(key, "hello mr buffer")).
+			Commit()
+		if err != nil {
+			panic(err)
+		}
+		if !response.Succeeded {
+			panic("oh dear someone has added the key already")
+		}
 	}
 
-	fmt.Println(kvc.Get(context.Background(), "purpleidea", clientv3.WithPrefix()))
+	// add some fake buffers to test the watch
+	ids := []int{1, 2, 3, 4, 5}
+	for _, id := range ids {
+		go atomic_add(id)
+	}
+	atomic_add(16)
 }
