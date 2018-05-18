@@ -7,6 +7,7 @@ import (
 	"container/list"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/clientv3util"
+	"os/exec"
 )
 
 func main() {
@@ -84,13 +85,17 @@ func main() {
 	// watch for slice updates
 	print_event := func(event *clientv3.Event) {
 		buffer_key := event.Kv.Value
-		atomic_add(fmt.Sprintf("/ready%s", buffer_key), "fake_mountpoint")
+		fakeMountpoint, err := exec.Command("date", "-u", "-Ins").Output()
+		if err != nil{
+			panic(err)
+		}
+		atomic_add(fmt.Sprintf("/ready%s", buffer_key), string(fakeMountpoint))
 	}
 	go watch_prefix("/slice", print_event)
 
 	// watch for buffer setup complete
 	print_buffer_ready := func(event *clientv3.Event) {
-		fmt.Printf("Buffer ready %s with mountpoint %s\n", event.Kv.Key, event.Kv.Value)
+		fmt.Printf("Buffer ready %s with mountpoint %s", event.Kv.Key, event.Kv.Value)
 	}
 	go watch_prefix("/ready", print_buffer_ready)
 
