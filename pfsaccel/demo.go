@@ -10,6 +10,20 @@ import (
 	"os/exec"
 )
 
+func cleanPrefix(client *clientv3.Client, prefix string) {
+	kvc := clientv3.NewKV(client)
+	fmt.Println(kvc.Get(context.Background(), prefix, clientv3.WithPrefix()))
+	kvc.Delete(context.Background(), prefix, clientv3.WithPrefix())
+}
+
+func clearAllData(client *clientv3.Client) {
+	fmt.Println("Cleanup started")
+	cleanPrefix(client, "/buffer")
+	cleanPrefix(client, "/slice")
+	cleanPrefix(client, "/ready")
+	fmt.Println("Cleanup done")
+}
+
 func main() {
 	fmt.Println("Hello from pfsaccel demo.")
 
@@ -21,22 +35,13 @@ func main() {
 		fmt.Println("hello")
 	}
 	defer cli.Close()
-	kvc := clientv3.NewKV(cli)
 
-	// tidy up keys once we are finished
-	clean_prefx := func(prefix string) {
-		fmt.Println(kvc.Get(context.Background(), prefix, clientv3.WithPrefix()))
-		fmt.Println(kvc.Delete(context.Background(), prefix, clientv3.WithPrefix()))
-	}
-	var tidyup = func() {
-		clean_prefx("/buffer")
-		clean_prefx("/slice")
-		clean_prefx("/ready")
-	}
-	tidyup()
-	defer tidyup()
+	// tidy up keys before we start and after we are finished
+	clearAllData(cli)
+	defer clearAllData(cli)
 
 	var atomic_add = func(key string, value string) {
+		kvc := clientv3.NewKV(cli)
 		response, err := kvc.Txn(context.Background()).
 			If(clientv3util.KeyMissing(key)).
 			Then(clientv3.OpPut(key, value)).
