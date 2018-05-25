@@ -10,8 +10,11 @@ import (
 	"os/exec"
 )
 
-// TODO: add and interface here
-func createStorageClient() (*clientv3.Client) {
+type etcKeystore struct {
+	*clientv3.Client
+}
+
+func New() (*etcKeystore) {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints: []string{"127.0.0.1:2379"},
 	})
@@ -20,25 +23,18 @@ func createStorageClient() (*clientv3.Client) {
 		fmt.Println("Oh dear failed to create client...")
 		panic(err)
 	}
-	return cli
+	return &etcKeystore{cli}
 }
 
-func cleanPrefix(client *clientv3.Client, prefix string) {
-	kvc := clientv3.NewKV(client)
+func (client *etcKeystore) CleanPrefix(prefix string) {
+	kvc := clientv3.NewKV(client.Client)
 	fmt.Println(kvc.Get(context.Background(), prefix, clientv3.WithPrefix()))
 	kvc.Delete(context.Background(), prefix, clientv3.WithPrefix())
 }
 
-func clearAllData(client *clientv3.Client) {
-	fmt.Println("Cleanup started")
-	cleanPrefix(client, "/buffer")
-	cleanPrefix(client, "/slice")
-	cleanPrefix(client, "/ready")
-	fmt.Println("Cleanup done")
-}
 
-func atomicAdd(client *clientv3.Client, key string, value string) {
-	kvc := clientv3.NewKV(client)
+func (client *etcKeystore) AtomicAdd(key string, value string) {
+	kvc := clientv3.NewKV(client.Client)
 	response, err := kvc.Txn(context.Background()).
 		If(clientv3util.KeyMissing(key)).
 		Then(clientv3.OpPut(key, value)).
@@ -51,7 +47,7 @@ func atomicAdd(client *clientv3.Client, key string, value string) {
 	}
 }
 
-func watchPrefix(client *clientv3.Client, prefix string, onPut func(event *clientv3.Event)) {
+func (client *etcKeystore) WatchPrefix(prefix string, onPut func(event *clientv3.Event)) {
 	rch := client.Watch(context.Background(), prefix, clientv3.WithPrefix())
 	for wresp := range rch {
 		for _, ev := range wresp.Events {
@@ -64,19 +60,34 @@ func watchPrefix(client *clientv3.Client, prefix string, onPut func(event *clien
 	}
 }
 
+type keystore interface {
+	Close() error
+	CleanPrefix(prefix string)
+	AtomicAdd(key string, value string)
+	WatchPrefix(prefix string, onPut func(event *clientv3.Event))
+}
+
+func clearAllData(client keystore) {
+	fmt.Println("Cleanup started")
+	client.CleanPrefix("/buffer")
+	client.CleanPrefix("/slice")
+	client.CleanPrefix("/ready")
+	fmt.Println("Cleanup done")
+}
+
 func main() {
 	fmt.Println("Hello from pfsaccel demo.")
 
-	cli := createStorageClient()
+	var cli keystore =  New()
 	defer cli.Close()
 
 	// tidy up keys before we start and after we are finished
 	clearAllData(cli)
 	defer clearAllData(cli)
 
-	var atomic_add_buffer = func(id int) {
+	var atomicAddBuffer = func(id int) {
 		var  key = fmt.Sprintf("/buffer/%d", id)
-		atomicAdd(cli, key, "I am a new buffer")
+		cli.AtomicAdd(key, "I am a new buffer")
 	}
 
 	// list of "available" slice ids
@@ -89,10 +100,10 @@ func main() {
 
 	// watch for buffers, create slice on put
 	make_slice := func(event *clientv3.Event) {
-		atomicAdd(cli, fmt.Sprintf("/slice/%d", slice_list_next.Value), string(event.Kv.Key))
+		cli.AtomicAdd(fmt.Sprintf("/slice/%d", slice_list_next.Value), string(event.Kv.Key))
 		slice_list_next = slice_list_next.Next()
 	}
-	go watchPrefix(cli, "/buffer", make_slice)
+	go cli.WatchPrefix("/buffer", make_slice)
 
 	// watch for slice updates
 	print_event := func(event *clientv3.Event) {
@@ -101,20 +112,20 @@ func main() {
 		if err != nil{
 			panic(err)
 		}
-		atomicAdd(cli, fmt.Sprintf("/ready%s", buffer_key), string(fakeMountpoint))
+		cli.AtomicAdd(fmt.Sprintf("/ready%s", buffer_key), string(fakeMountpoint))
 	}
-	go watchPrefix(cli, "/slice", print_event)
+	go cli.WatchPrefix("/slice", print_event)
 
 	// watch for buffer setup complete
 	print_buffer_ready := func(event *clientv3.Event) {
 		fmt.Printf("Buffer ready %s with mountpoint %s", event.Kv.Key, event.Kv.Value)
 	}
-	go watchPrefix(cli, "/ready", print_buffer_ready)
+	go cli.WatchPrefix("/ready", print_buffer_ready)
 
 	// add some fake buffers to test the watch
 	ids := []int{1, 2, 3, 4, 5}
 	for _, id := range ids {
-		atomic_add_buffer(id)
+		atomicAddBuffer(id)
 	}
-	atomic_add_buffer(16)
+	atomicAddBuffer(16)
 }
