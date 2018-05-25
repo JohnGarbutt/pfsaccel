@@ -10,6 +10,19 @@ import (
 	"os/exec"
 )
 
+// TODO: add and interface here
+func createStorageClient() (*clientv3.Client) {
+	cli, err := clientv3.New(clientv3.Config{
+		Endpoints: []string{"127.0.0.1:2379"},
+	})
+	if err != nil {
+		log.Fatal(err)
+		fmt.Println("Oh dear failed to create client...")
+		panic(err)
+	}
+	return cli
+}
+
 func cleanPrefix(client *clientv3.Client, prefix string) {
 	kvc := clientv3.NewKV(client)
 	fmt.Println(kvc.Get(context.Background(), prefix, clientv3.WithPrefix()))
@@ -24,39 +37,46 @@ func clearAllData(client *clientv3.Client) {
 	fmt.Println("Cleanup done")
 }
 
+func atomicAdd(client *clientv3.Client, key string, value string) {
+	kvc := clientv3.NewKV(client)
+	response, err := kvc.Txn(context.Background()).
+		If(clientv3util.KeyMissing(key)).
+		Then(clientv3.OpPut(key, value)).
+		Commit()
+	if err != nil {
+		panic(err)
+	}
+	if !response.Succeeded {
+		panic("oh dear someone has added the key already")
+	}
+}
+
+func watchPrefix(client *clientv3.Client, prefix string, onPut func(event *clientv3.Event)) {
+	rch := client.Watch(context.Background(), prefix, clientv3.WithPrefix())
+	for wresp := range rch {
+		for _, ev := range wresp.Events {
+			if ev.Type.String() == "PUT" {
+				onPut(ev)
+			} else {
+				fmt.Printf("%s %q : %q\n", ev.Type, ev.Kv.Key, ev.Kv.Value)
+			}
+		}
+	}
+}
+
 func main() {
 	fmt.Println("Hello from pfsaccel demo.")
 
-	cli, err := clientv3.New(clientv3.Config{
-		Endpoints: []string{"127.0.0.1:2379"},
-	})
-	if err != nil {
-		log.Fatal(err)
-		fmt.Println("hello")
-	}
+	cli := createStorageClient()
 	defer cli.Close()
 
 	// tidy up keys before we start and after we are finished
 	clearAllData(cli)
 	defer clearAllData(cli)
 
-	var atomic_add = func(key string, value string) {
-		kvc := clientv3.NewKV(cli)
-		response, err := kvc.Txn(context.Background()).
-			If(clientv3util.KeyMissing(key)).
-			Then(clientv3.OpPut(key, value)).
-			Commit()
-		if err != nil {
-			panic(err)
-		}
-		if !response.Succeeded {
-			panic("oh dear someone has added the key already")
-		}
-	}
-
 	var atomic_add_buffer = func(id int) {
 		var  key = fmt.Sprintf("/buffer/%d", id)
-		atomic_add(key, "I am a new buffer")
+		atomicAdd(cli, key, "I am a new buffer")
 	}
 
 	// list of "available" slice ids
@@ -67,25 +87,12 @@ func main() {
 	}
 	slice_list_next := slice_list.Front()
 
-	var watch_prefix = func(prefix string, onPut func(event *clientv3.Event)) {
-		rch := cli.Watch(context.Background(), prefix, clientv3.WithPrefix())
-		for wresp := range rch {
-			for _, ev := range wresp.Events {
-				if ev.Type.String() == "PUT" {
-					onPut(ev)
-				} else {
-					fmt.Printf("%s %q : %q\n", ev.Type, ev.Kv.Key, ev.Kv.Value)
-				}
-			}
-		}
-	}
-
 	// watch for buffers, create slice on put
 	make_slice := func(event *clientv3.Event) {
-		atomic_add(fmt.Sprintf("/slice/%d", slice_list_next.Value), string(event.Kv.Key))
+		atomicAdd(cli, fmt.Sprintf("/slice/%d", slice_list_next.Value), string(event.Kv.Key))
 		slice_list_next = slice_list_next.Next()
 	}
-	go watch_prefix("/buffer", make_slice)
+	go watchPrefix(cli, "/buffer", make_slice)
 
 	// watch for slice updates
 	print_event := func(event *clientv3.Event) {
@@ -94,15 +101,15 @@ func main() {
 		if err != nil{
 			panic(err)
 		}
-		atomic_add(fmt.Sprintf("/ready%s", buffer_key), string(fakeMountpoint))
+		atomicAdd(cli, fmt.Sprintf("/ready%s", buffer_key), string(fakeMountpoint))
 	}
-	go watch_prefix("/slice", print_event)
+	go watchPrefix(cli, "/slice", print_event)
 
 	// watch for buffer setup complete
 	print_buffer_ready := func(event *clientv3.Event) {
 		fmt.Printf("Buffer ready %s with mountpoint %s", event.Kv.Key, event.Kv.Value)
 	}
-	go watch_prefix("/ready", print_buffer_ready)
+	go watchPrefix(cli, "/ready", print_buffer_ready)
 
 	// add some fake buffers to test the watch
 	ids := []int{1, 2, 3, 4, 5}
