@@ -8,6 +8,13 @@ import (
 	"github.com/coreos/etcd/clientv3/clientv3util"
 )
 
+type Keystore interface {
+	Close() error
+	CleanPrefix(prefix string)
+	AtomicAdd(key string, value string)
+	WatchPutPrefix(prefix string, onPut func(string, string))
+}
+
 type etcKeystore struct {
 	*clientv3.Client
 }
@@ -30,7 +37,6 @@ func (client *etcKeystore) CleanPrefix(prefix string) {
 	kvc.Delete(context.Background(), prefix, clientv3.WithPrefix())
 }
 
-
 func (client *etcKeystore) AtomicAdd(key string, value string) {
 	kvc := clientv3.NewKV(client.Client)
 	response, err := kvc.Txn(context.Background()).
@@ -45,7 +51,7 @@ func (client *etcKeystore) AtomicAdd(key string, value string) {
 	}
 }
 
-func (client *etcKeystore) WatchPrefix(prefix string, onPut func(key string, value string)) {
+func (client *etcKeystore) WatchPutPrefix(prefix string, onPut func(key string, value string)) {
 	rch := client.Watch(context.Background(), prefix, clientv3.WithPrefix())
 	for wresp := range rch {
 		for _, ev := range wresp.Events {
