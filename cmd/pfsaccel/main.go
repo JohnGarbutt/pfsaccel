@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/JohnGarbutt/pfsaccel/internal/pkg/registry"
 	"os/exec"
+	"runtime"
 	"sync"
 )
 
@@ -70,6 +71,8 @@ func main() {
 	waitBuffer.Add(1)
 	waitSlice.Add(1)
 	registry.AddBuffer(16)
+
+	runtime.Gosched()
 
 	// Wait for all the buffer work to happen
 	waitBuffer.Wait()
