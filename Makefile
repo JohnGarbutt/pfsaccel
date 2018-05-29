@@ -19,7 +19,7 @@ BIN := pfsaccel
 PKG := github.com/JohnGarbutt/pfsaccel
 
 # Where to push the docker image.
-REGISTRY ?= localhost
+REGISTRY ?= johngarbutt
 
 # Which architecture to build - see $(ALL_ARCH) for options.
 ARCH ?= amd64
