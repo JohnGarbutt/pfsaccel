@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"os/exec"
 	"github.com/JohnGarbutt/pfsaccel/internal/pkg/registry"
+	"os/exec"
 )
 
 type BufferRegistry interface {
@@ -11,8 +11,8 @@ type BufferRegistry interface {
 	ClearAllData()
 	AddBuffer(id int)
 	AddSlice(id int, s string)
-    AddMountpoint(id string, mountpoint string)
-    WatchNewBuffer(callback func(string, string))
+	AddMountpoint(id string, mountpoint string)
+	WatchNewBuffer(callback func(string, string))
 	WatchNewSlice(callback func(key string, value string))
 	WatchNewReady(callback func(key string, value string))
 }
@@ -43,7 +43,7 @@ func main() {
 	print_event := func(key string, value string) {
 		buffer_key := value
 		fakeMountpoint, err := exec.Command("date", "-u", "-Ins").Output()
-		if err != nil{
+		if err != nil {
 			panic(err)
 		}
 		registry.AddMountpoint(buffer_key, string(fakeMountpoint))
