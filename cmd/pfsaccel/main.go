@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"os/exec"
-	"github.com/johngarbutt/pfsaccel/pkg/registry"
+	"github.com/johngarbutt/pfsaccel/internal/pkg/registry"
 )
 
 type BufferRegistry interface {
