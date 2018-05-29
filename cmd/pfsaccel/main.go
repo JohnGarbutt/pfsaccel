@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/JohnGarbutt/pfsaccel/internal/pkg/registry"
 	"os/exec"
+	"sync"
 )
 
 type BufferRegistry interface {
@@ -32,14 +33,16 @@ func main() {
 	slice_index := 0
 
 	// watch for buffers, create slice on put
+	var waitBuffer sync.WaitGroup
 	make_slice := func(key string, value string) {
 		registry.AddSlice(slice_ids[slice_index], key)
 		slice_index++
+		waitBuffer.Done()
 	}
-	// TODO: how to do context cancel on SIG_TERM
 	go registry.WatchNewBuffer(make_slice)
 
 	// watch for slice updates
+	var waitSlice sync.WaitGroup
 	print_event := func(key string, value string) {
 		buffer_key := value
 		fakeMountpoint, err := exec.Command("date", "-u", "-Ins").Output()
@@ -47,6 +50,7 @@ func main() {
 			panic(err)
 		}
 		registry.AddMountpoint(buffer_key, string(fakeMountpoint))
+		waitSlice.Done()
 	}
 	go registry.WatchNewSlice(print_event)
 
@@ -59,7 +63,15 @@ func main() {
 	// add some fake buffers to test the watch
 	ids := []int{1, 2, 3, 4, 5}
 	for _, id := range ids {
+		waitBuffer.Add(1)
+		waitSlice.Add(1)
 		registry.AddBuffer(id)
 	}
+	waitBuffer.Add(1)
+	waitSlice.Add(1)
 	registry.AddBuffer(16)
+
+	// Wait for all the buffer work to happen
+	waitBuffer.Wait()
+	waitSlice.Wait()
 }
