@@ -9,11 +9,11 @@
 Parallel File System Accelerator (for SLURM burst buffer plugin)
 
 To try this out:
-
-```go get https://github.com/JohnGarbutt/pfsaccel/cmd/pfsaccel
+```
+go get https://github.com/JohnGarbutt/pfsaccel/cmd/pfsaccel
 ```
 
 To build it locally:
-
-```make
+```
+make
 ```
