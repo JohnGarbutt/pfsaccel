@@ -8,21 +8,10 @@ import (
 	"sync"
 )
 
-type BufferRegistry interface {
-	Close() error
-	ClearAllData()
-	AddBuffer(id int)
-	AddSlice(id int, s string)
-	AddMountpoint(id string, mountpoint string)
-	WatchNewBuffer(callback func(string, string))
-	WatchNewSlice(callback func(key string, value string))
-	WatchNewReady(callback func(key string, value string))
-}
-
 func main() {
 	fmt.Println("Hello from pfsaccel demo.")
 
-	var registry BufferRegistry = registry.NewBufferRegistry()
+	registry := registry.NewBufferRegistry()
 	defer registry.Close()
 
 	// tidy up keys before we start and after we are finished
@@ -30,36 +19,36 @@ func main() {
 	defer registry.ClearAllData()
 
 	// list of "available" slice ids
-	slice_ids := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-	slice_index := 0
+	sliceIds := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+	sliceIndex := 0
 
 	// watch for buffers, create slice on put
 	var waitBuffer sync.WaitGroup
-	make_slice := func(key string, value string) {
-		registry.AddSlice(slice_ids[slice_index], key)
-		slice_index++
+	makeSlice := func(key string, value string) {
+		registry.AddSlice(sliceIds[sliceIndex], key)
+		sliceIndex++
 		waitBuffer.Done()
 	}
-	go registry.WatchNewBuffer(make_slice)
+	go registry.WatchNewBuffer(makeSlice)
 
 	// watch for slice updates
 	var waitSlice sync.WaitGroup
-	print_event := func(key string, value string) {
-		buffer_key := value
+	printEvent := func(key string, value string) {
+		bufferKey := value
 		fakeMountpoint, err := exec.Command("date", "-u", "-Ins").Output()
 		if err != nil {
 			panic(err)
 		}
-		registry.AddMountpoint(buffer_key, string(fakeMountpoint))
+		registry.AddMountpoint(bufferKey, string(fakeMountpoint))
 		waitSlice.Done()
 	}
-	go registry.WatchNewSlice(print_event)
+	go registry.WatchNewSlice(printEvent)
 
 	// watch for buffer setup complete
-	print_buffer_ready := func(key string, value string) {
+	printBufferReady := func(key string, value string) {
 		fmt.Printf("Buffer ready %s with mountpoint %s", key, value)
 	}
-	go registry.WatchNewReady(print_buffer_ready)
+	go registry.WatchNewReady(printBufferReady)
 
 	// add some fake buffers to test the watch
 	ids := []int{1, 2, 3, 4, 5}

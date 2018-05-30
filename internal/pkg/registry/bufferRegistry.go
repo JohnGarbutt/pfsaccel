@@ -4,11 +4,22 @@ import (
 	"fmt"
 )
 
+type BufferRegistry interface {
+	Close() error
+	ClearAllData()
+	AddBuffer(id int)
+	AddSlice(id int, s string)
+	AddMountpoint(id string, mountpoint string)
+	WatchNewBuffer(callback func(string, string))
+	WatchNewSlice(callback func(key string, value string))
+	WatchNewReady(callback func(key string, value string))
+}
+
 type bufferRegistry struct {
 	keystore Keystore
 }
 
-func NewBufferRegistry() *bufferRegistry {
+func NewBufferRegistry() BufferRegistry {
 	keystore := NewKeystore()
 	return &bufferRegistry{keystore}
 }
