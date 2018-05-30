@@ -1,11 +1,11 @@
 package registry
 
 import (
-	"fmt"
-	"log"
 	"context"
+	"fmt"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/clientv3util"
+	"log"
 )
 
 type Keystore interface {
@@ -19,7 +19,7 @@ type etcKeystore struct {
 	*clientv3.Client
 }
 
-func NewKeystore() (*etcKeystore) {
+func NewKeystore() *etcKeystore {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints: []string{"127.0.0.1:2379"},
 	})

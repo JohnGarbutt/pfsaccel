@@ -8,7 +8,7 @@ type bufferRegistry struct {
 	keystore Keystore
 }
 
-func NewBufferRegistry() (*bufferRegistry) {
+func NewBufferRegistry() *bufferRegistry {
 	keystore := NewKeystore()
 	return &bufferRegistry{keystore}
 }
