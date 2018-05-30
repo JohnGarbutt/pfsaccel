@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/JohnGarbutt/pfsaccel/internal/pkg/registry"
+	"github.com/JohnGarbutt/pfsaccel/internal/pkg/oldregistry"
 	"os/exec"
 	"runtime"
 	"sync"
@@ -11,7 +11,7 @@ import (
 func main() {
 	fmt.Println("Hello from pfsaccel demo.")
 
-	registry := registry.NewBufferRegistry()
+	registry := oldregistry.NewBufferRegistry()
 	defer registry.Close()
 
 	// tidy up keys before we start and after we are finished
