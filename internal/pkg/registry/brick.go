@@ -1,6 +1,7 @@
 package registry
 
 type Brick struct {
+	Uuid string
 	Name string
 	CapacityGB uint
 	Driver Driver

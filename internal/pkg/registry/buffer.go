@@ -16,7 +16,12 @@ type Buffer struct {
 	Controller Host
 	Mounts []Mount
 	Provisioned bool
+	DeleteRequested bool
 	AttachmentDetails AttachmentDetails
+}
+
+func (buffer *Buffer) ReadyToMount() bool {
+	return buffer.Provisioned && buffer.Mounts!=nil && !buffer.DeleteRequested
 }
 
 type AttachmentDetails struct {

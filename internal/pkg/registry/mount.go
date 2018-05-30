@@ -4,6 +4,7 @@ type Mount struct {
 	Hostname string
 	Config MountConfig
 	Mounted bool
+	UnmountRequested bool
 }
 
 type MountConfig struct {
